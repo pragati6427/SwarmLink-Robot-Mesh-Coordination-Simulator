@@ -1,0 +1,1020 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SwarmLink — Bluetooth Mesh Robot Coordination</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;600;700&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #040810;
+    --panel: #080f1a;
+    --border: #0a2040;
+    --accent: #00e5ff;
+    --accent2: #ff6b35;
+    --accent3: #39ff14;
+    --warn: #ffcc00;
+    --dim: #1a3050;
+    --text: #c8e0f0;
+    --text-dim: #4a7090;
+    --robot-a: #00e5ff;
+    --robot-b: #ff6b35;
+    --robot-c: #39ff14;
+    --robot-d: #c97bff;
+    --robot-e: #ffcc00;
+    --robot-f: #ff4d6d;
+    --mesh: rgba(0,229,255,0.08);
+    --glow: 0 0 20px rgba(0,229,255,0.4);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Rajdhani', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Grid noise overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,229,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,229,255,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  header {
+    position: relative;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 32px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(4,8,16,0.9);
+    backdrop-filter: blur(10px);
+  }
+
+  .logo {
+    font-family: 'Orbitron', monospace;
+    font-size: 22px;
+    font-weight: 900;
+    color: var(--accent);
+    letter-spacing: 3px;
+    text-shadow: var(--glow);
+  }
+  .logo span { color: var(--accent2); }
+
+  .header-stats {
+    display: flex;
+    gap: 32px;
+  }
+
+  .hstat {
+    text-align: center;
+  }
+  .hstat-val {
+    font-family: 'Orbitron', monospace;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--accent);
+  }
+  .hstat-label {
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+
+  .status-pill {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-family: 'Share Tech Mono', monospace;
+    color: var(--accent3);
+    border: 1px solid var(--accent3);
+    padding: 6px 14px;
+    border-radius: 2px;
+  }
+  .pulse-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--accent3);
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%,100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(0.7); }
+  }
+
+  main {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    grid-template-columns: 280px 1fr 300px;
+    grid-template-rows: auto 1fr;
+    height: calc(100vh - 65px);
+    gap: 0;
+  }
+
+  /* ---- LEFT PANEL ---- */
+  .left-panel {
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .panel-title {
+    font-family: 'Orbitron', monospace;
+    font-size: 11px;
+    letter-spacing: 3px;
+    color: var(--text-dim);
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    text-transform: uppercase;
+  }
+
+  .robot-list {
+    overflow-y: auto;
+    flex: 1;
+  }
+
+  .robot-item {
+    padding: 14px 20px;
+    border-bottom: 1px solid rgba(10,32,64,0.5);
+    cursor: pointer;
+    transition: background 0.2s;
+    position: relative;
+  }
+  .robot-item:hover { background: rgba(0,229,255,0.04); }
+  .robot-item.selected { background: rgba(0,229,255,0.07); }
+  .robot-item.selected::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 3px;
+    background: var(--robot-color, var(--accent));
+  }
+
+  .robot-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+  }
+
+  .robot-icon {
+    width: 32px; height: 32px;
+    border-radius: 4px;
+    border: 1px solid var(--robot-color, var(--accent));
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px;
+    background: rgba(0,0,0,0.3);
+    flex-shrink: 0;
+    box-shadow: 0 0 10px var(--robot-color, var(--accent));
+  }
+
+  .robot-name {
+    font-family: 'Orbitron', monospace;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--robot-color, var(--accent));
+  }
+
+  .robot-role {
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 1px;
+  }
+
+  .robot-metrics {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px;
+  }
+  .metric {
+    font-size: 11px;
+    color: var(--text-dim);
+    font-family: 'Share Tech Mono', monospace;
+  }
+  .metric span {
+    color: var(--text);
+  }
+
+  .bar-wrap {
+    margin-top: 6px;
+    height: 3px;
+    background: var(--dim);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    background: var(--robot-color, var(--accent));
+    transition: width 1s ease;
+  }
+
+  .controls-section {
+    padding: 16px 20px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .btn {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    padding: 9px 16px;
+    border: 1px solid;
+    background: transparent;
+    cursor: pointer;
+    transition: all 0.2s;
+    border-radius: 2px;
+  }
+  .btn-primary {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .btn-primary:hover {
+    background: var(--accent);
+    color: var(--bg);
+    box-shadow: var(--glow);
+  }
+  .btn-danger {
+    border-color: var(--accent2);
+    color: var(--accent2);
+  }
+  .btn-danger:hover {
+    background: var(--accent2);
+    color: var(--bg);
+  }
+  .btn-warn {
+    border-color: var(--warn);
+    color: var(--warn);
+  }
+  .btn-warn:hover {
+    background: var(--warn);
+    color: var(--bg);
+  }
+
+  /* ---- CENTER CANVAS ---- */
+  .center-panel {
+    position: relative;
+    overflow: hidden;
+    background: radial-gradient(ellipse at center, #050d18 0%, var(--bg) 70%);
+  }
+
+  #arena {
+    width: 100%;
+    height: 100%;
+  }
+
+  .arena-label {
+    position: absolute;
+    top: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 3px;
+    text-transform: uppercase;
+  }
+
+  .mission-overlay {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(4,8,16,0.85);
+    border: 1px solid var(--border);
+    padding: 10px 24px;
+    font-family: 'Orbitron', monospace;
+    font-size: 12px;
+    letter-spacing: 2px;
+    color: var(--warn);
+    white-space: nowrap;
+  }
+
+  /* ---- RIGHT PANEL ---- */
+  .right-panel {
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .log-section {
+    flex: 1;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .log-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px 16px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+  }
+
+  .log-entry {
+    padding: 4px 0;
+    border-bottom: 1px solid rgba(10,32,64,0.4);
+    line-height: 1.5;
+    animation: fadeIn 0.3s ease;
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateX(10px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+
+  .log-time { color: var(--text-dim); }
+  .log-tag {
+    padding: 1px 5px;
+    border-radius: 2px;
+    font-size: 10px;
+    font-weight: 700;
+    margin: 0 4px;
+  }
+  .tag-mesh { background: rgba(0,229,255,0.15); color: var(--accent); }
+  .tag-nav { background: rgba(57,255,20,0.15); color: var(--accent3); }
+  .tag-warn { background: rgba(255,204,0,0.15); color: var(--warn); }
+  .tag-err { background: rgba(255,107,53,0.15); color: var(--accent2); }
+  .tag-sync { background: rgba(201,123,255,0.15); color: #c97bff; }
+
+  .network-section {
+    border-top: 1px solid var(--border);
+    padding: 14px 16px;
+  }
+
+  .network-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  .net-stat {
+    background: rgba(8,15,26,0.8);
+    border: 1px solid var(--border);
+    padding: 10px;
+    border-radius: 2px;
+  }
+
+  .net-stat-val {
+    font-family: 'Orbitron', monospace;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--accent);
+  }
+
+  .net-stat-label {
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-top: 2px;
+  }
+
+  .mission-section {
+    border-top: 1px solid var(--border);
+    padding: 14px 16px;
+  }
+
+  .mission-list {
+    margin-top: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .mission-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    padding: 6px 8px;
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .mission-item:hover {
+    border-color: var(--accent);
+    background: rgba(0,229,255,0.05);
+  }
+
+  .mission-item.active {
+    border-color: var(--accent3);
+    color: var(--accent3);
+  }
+
+  .mission-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--text-dim);
+    flex-shrink: 0;
+  }
+
+  .mission-item.active .mission-dot {
+    background: var(--accent3);
+    box-shadow: 0 0 6px var(--accent3);
+  }
+
+  /* Scrollbar styling */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--dim); border-radius: 2px; }
+
+  .signal-bars {
+    display: flex;
+    gap: 2px;
+    align-items: flex-end;
+    height: 14px;
+  }
+  .signal-bar {
+    width: 3px;
+    background: var(--dim);
+    border-radius: 1px;
+  }
+  .signal-bar.active { background: var(--accent3); }
+
+  .topology-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 10px;
+    font-family: 'Share Tech Mono', monospace;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    padding: 2px 8px;
+    border-radius: 2px;
+    margin-left: 8px;
+    vertical-align: middle;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">SWARM<span>LINK</span></div>
+  <div class="header-stats">
+    <div class="hstat">
+      <div class="hstat-val" id="h-robots">6</div>
+      <div class="hstat-label">Active Robots</div>
+    </div>
+    <div class="hstat">
+      <div class="hstat-val" id="h-links">12</div>
+      <div class="hstat-label">Mesh Links</div>
+    </div>
+    <div class="hstat">
+      <div class="hstat-val" id="h-latency">14ms</div>
+      <div class="hstat-label">Avg Latency</div>
+    </div>
+    <div class="hstat">
+      <div class="hstat-val" id="h-packets">0</div>
+      <div class="hstat-label">Packets/s</div>
+    </div>
+  </div>
+  <div class="status-pill">
+    <div class="pulse-dot"></div>
+    MESH ACTIVE
+  </div>
+</header>
+
+<main>
+  <!-- LEFT: Robot List -->
+  <div class="left-panel">
+    <div class="panel-title">Fleet Registry</div>
+    <div class="robot-list" id="robot-list"></div>
+    <div class="controls-section">
+      <button class="btn btn-primary" onclick="startFormation('grid')">▣ Grid Formation</button>
+      <button class="btn btn-primary" onclick="startFormation('circle')">◎ Circle Formation</button>
+      <button class="btn btn-primary" onclick="startFormation('explore')">⟳ Explore Mode</button>
+      <button class="btn btn-warn" onclick="startFormation('evade')">⚠ Collision Avoidance</button>
+      <button class="btn btn-danger" onclick="emergencyStop()">■ Emergency Stop</button>
+    </div>
+  </div>
+
+  <!-- CENTER: Arena Canvas -->
+  <div class="center-panel">
+    <div class="arena-label">MISSION ARENA — BLUETOOTH MESH ZONE</div>
+    <canvas id="arena"></canvas>
+    <div class="mission-overlay" id="mission-text">FORMATION: EXPLORE MODE</div>
+  </div>
+
+  <!-- RIGHT: Logs + Stats -->
+  <div class="right-panel">
+    <div class="log-section">
+      <div class="panel-title">Mesh Event Log</div>
+      <div class="log-body" id="log-body"></div>
+    </div>
+
+    <div class="network-section">
+      <div class="panel-title" style="padding:0;margin-bottom:4px;">Network Topology <span class="topology-badge">⬡ MESH</span></div>
+      <div class="network-grid">
+        <div class="net-stat">
+          <div class="net-stat-val" id="ns-throughput">2.4</div>
+          <div class="net-stat-label">Mbps Throughput</div>
+        </div>
+        <div class="net-stat">
+          <div class="net-stat-val" id="ns-hops">2.1</div>
+          <div class="net-stat-label">Avg Hops</div>
+        </div>
+        <div class="net-stat">
+          <div class="net-stat-val" id="ns-rssi">-62</div>
+          <div class="net-stat-label">dBm RSSI</div>
+        </div>
+        <div class="net-stat">
+          <div class="net-stat-val" id="ns-uptime">99.8</div>
+          <div class="net-stat-label">% Uptime</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="mission-section">
+      <div class="panel-title" style="padding:0;margin-bottom:4px;">Mission Presets</div>
+      <div class="mission-list">
+        <div class="mission-item active" onclick="selectMission(this,'explore')">
+          <div class="mission-dot"></div> Autonomous Exploration
+        </div>
+        <div class="mission-item" onclick="selectMission(this,'grid')">
+          <div class="mission-dot"></div> Grid Coverage Sweep
+        </div>
+        <div class="mission-item" onclick="selectMission(this,'circle')">
+          <div class="mission-dot"></div> Perimeter Guard
+        </div>
+        <div class="mission-item" onclick="selectMission(this,'evade')">
+          <div class="mission-dot"></div> Obstacle Avoidance
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+// ===========================
+// ROBOT SIMULATION ENGINE
+// ===========================
+
+const COLORS = ['#00e5ff','#ff6b35','#39ff14','#c97bff','#ffcc00','#ff4d6d'];
+const ICONS = ['🤖','⚙️','🦾','🔩','🛸','🔧'];
+const ROLES = ['LEADER','RELAY','SCOUT','RELAY','WORKER','SCOUT'];
+
+const canvas = document.getElementById('arena');
+const ctx = canvas.getContext('2d');
+
+let W, H;
+let frameId;
+let simRunning = true;
+let currentFormation = 'explore';
+let tickCount = 0;
+let packetCount = 0;
+
+// Robot state
+const robots = Array.from({length:6}, (_, i) => ({
+  id: i,
+  name: `R-${String(i+1).padStart(2,'0')}`,
+  role: ROLES[i],
+  color: COLORS[i],
+  icon: ICONS[i],
+  x: 0, y: 0,
+  tx: 0, ty: 0,
+  vx: 0, vy: 0,
+  battery: 75 + Math.random() * 20,
+  signal: 70 + Math.random() * 30,
+  latency: 8 + Math.floor(Math.random() * 20),
+  packets: 0,
+  status: 'ACTIVE',
+  angle: (Math.PI * 2 / 6) * i,
+  selected: false,
+  trail: [],
+  broadcasting: false,
+  broadcastTimer: 0,
+  messageQueue: [],
+}));
+
+// Mesh connections (adjacency)
+let meshLinks = [];
+
+function resize() {
+  const panel = canvas.parentElement;
+  W = canvas.width = panel.clientWidth;
+  H = canvas.height = panel.clientHeight;
+  // Init positions
+  robots.forEach((r, i) => {
+    if (r.x === 0 && r.y === 0) {
+      r.x = W/2 + Math.cos(r.angle) * 120;
+      r.y = H/2 + Math.sin(r.angle) * 120;
+      r.tx = r.x; r.ty = r.y;
+    }
+  });
+}
+
+// ==== FORMATIONS ====
+function startFormation(type) {
+  currentFormation = type;
+  document.getElementById('mission-text').textContent = {
+    grid: 'FORMATION: GRID COVERAGE SWEEP',
+    circle: 'FORMATION: PERIMETER GUARD',
+    explore: 'FORMATION: AUTONOMOUS EXPLORATION',
+    evade: 'FORMATION: COLLISION AVOIDANCE PROTOCOL',
+  }[type];
+
+  const cx = W/2, cy = H/2;
+  const margin = 80;
+
+  if (type === 'grid') {
+    const positions = [
+      [cx-120, cy-80],[cx, cy-80],[cx+120, cy-80],
+      [cx-120, cy+80],[cx, cy+80],[cx+120, cy+80],
+    ];
+    robots.forEach((r,i) => { r.tx=positions[i][0]; r.ty=positions[i][1]; });
+    log('MESH','Grid formation initiated — 6-node coverage pattern','mesh');
+    log('NAV','Optimal spacing: 120px inter-robot distance','nav');
+  } else if (type === 'circle') {
+    const R = Math.min(W,H) * 0.32;
+    robots.forEach((r,i) => {
+      const a = (Math.PI*2/6)*i - Math.PI/2;
+      r.tx = cx + Math.cos(a)*R;
+      r.ty = cy + Math.sin(a)*R;
+    });
+    log('MESH','Perimeter guard formation: circular pattern deployed','mesh');
+    log('SYNC','All robots synchronized to formation clock','sync');
+  } else if (type === 'explore') {
+    robots.forEach(r => {
+      r.tx = margin + Math.random()*(W-margin*2);
+      r.ty = margin + Math.random()*(H-margin*2);
+    });
+    log('NAV','Autonomous exploration: random dispersal activated','nav');
+  } else if (type === 'evade') {
+    log('WARN','Collision avoidance mode ON — reactive protocol engaged','warn');
+  }
+}
+
+function emergencyStop() {
+  robots.forEach(r => { r.tx=r.x; r.ty=r.y; r.vx=0; r.vy=0; r.status='STOPPED'; });
+  log('ERR','EMERGENCY STOP — all motors halted','err');
+  setTimeout(() => robots.forEach(r => r.status='ACTIVE'), 3000);
+}
+
+function selectMission(el, type) {
+  document.querySelectorAll('.mission-item').forEach(m => m.classList.remove('active'));
+  el.classList.add('active');
+  startFormation(type);
+}
+
+// ==== MESH LINKS ====
+function updateMeshLinks() {
+  meshLinks = [];
+  const RANGE = 200;
+  for (let i=0; i<robots.length; i++) {
+    for (let j=i+1; j<robots.length; j++) {
+      const dx = robots[i].x - robots[j].x;
+      const dy = robots[i].y - robots[j].y;
+      const dist = Math.sqrt(dx*dx+dy*dy);
+      if (dist < RANGE) {
+        meshLinks.push({a:i, b:j, dist, strength: 1 - dist/RANGE});
+      }
+    }
+  }
+  document.getElementById('h-links').textContent = meshLinks.length;
+}
+
+// ==== DRAWING ====
+function drawMeshLinks() {
+  meshLinks.forEach(link => {
+    const ra = robots[link.a], rb = robots[link.b];
+    // Animated dashed line
+    ctx.save();
+    ctx.globalAlpha = 0.15 + link.strength * 0.35;
+    ctx.strokeStyle = ra.color;
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 8]);
+    ctx.lineDashOffset = -(tickCount * 0.5);
+    ctx.beginPath();
+    ctx.moveTo(ra.x, ra.y);
+    ctx.lineTo(rb.x, rb.y);
+    ctx.stroke();
+    ctx.restore();
+
+    // Data packet animation
+    if (Math.random() < 0.02) {
+      const packet = {
+        ax: ra.x, ay: ra.y,
+        bx: rb.x, by: rb.y,
+        t: 0, color: Math.random() > 0.5 ? ra.color : rb.color,
+      };
+      packets.push(packet);
+      packetCount++;
+    }
+  });
+}
+
+let packets = [];
+
+function drawPackets() {
+  packets = packets.filter(p => p.t < 1);
+  packets.forEach(p => {
+    p.t += 0.04;
+    const x = p.ax + (p.bx - p.ax) * p.t;
+    const y = p.ay + (p.by - p.ay) * p.t;
+    ctx.beginPath();
+    ctx.arc(x, y, 3, 0, Math.PI*2);
+    ctx.fillStyle = p.color;
+    ctx.shadowBlur = 8;
+    ctx.shadowColor = p.color;
+    ctx.fill();
+    ctx.shadowBlur = 0;
+  });
+}
+
+function drawRobot(r) {
+  const x = r.x, y = r.y;
+
+  // Trail
+  r.trail.push({x, y});
+  if (r.trail.length > 30) r.trail.shift();
+  ctx.beginPath();
+  r.trail.forEach((pt, i) => {
+    ctx.globalAlpha = i / r.trail.length * 0.2;
+    if (i === 0) ctx.moveTo(pt.x, pt.y);
+    else ctx.lineTo(pt.x, pt.y);
+  });
+  ctx.strokeStyle = r.color;
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+
+  // Broadcast ring
+  if (r.broadcasting) {
+    r.broadcastTimer++;
+    const radius = (r.broadcastTimer % 60) * 3;
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI*2);
+    ctx.strokeStyle = r.color;
+    ctx.globalAlpha = Math.max(0, 1 - radius/180);
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+
+  // Glow
+  ctx.save();
+  ctx.shadowBlur = r.selected ? 30 : 14;
+  ctx.shadowColor = r.color;
+
+  // Body
+  ctx.beginPath();
+  const size = r.status === 'STOPPED' ? 14 : 16;
+  ctx.rect(x-size, y-size, size*2, size*2);
+  ctx.fillStyle = `rgba(4,8,16,0.9)`;
+  ctx.fill();
+  ctx.strokeStyle = r.color;
+  ctx.lineWidth = r.selected ? 2.5 : 1.5;
+  ctx.stroke();
+  ctx.restore();
+
+  // Inner dot
+  ctx.beginPath();
+  ctx.arc(x, y, 4, 0, Math.PI*2);
+  ctx.fillStyle = r.color;
+  ctx.fill();
+
+  // Corner brackets
+  const b = 5, bs = 18;
+  ctx.strokeStyle = r.color;
+  ctx.lineWidth = 1.5;
+  ctx.globalAlpha = 0.5;
+  // TL
+  ctx.beginPath(); ctx.moveTo(x-bs,y-bs+b); ctx.lineTo(x-bs,y-bs); ctx.lineTo(x-bs+b,y-bs); ctx.stroke();
+  // TR
+  ctx.beginPath(); ctx.moveTo(x+bs-b,y-bs); ctx.lineTo(x+bs,y-bs); ctx.lineTo(x+bs,y-bs+b); ctx.stroke();
+  // BL
+  ctx.beginPath(); ctx.moveTo(x-bs,y+bs-b); ctx.lineTo(x-bs,y+bs); ctx.lineTo(x-bs+b,y+bs); ctx.stroke();
+  // BR
+  ctx.beginPath(); ctx.moveTo(x+bs-b,y+bs); ctx.lineTo(x+bs,y+bs); ctx.lineTo(x+bs,y+bs-b); ctx.stroke();
+  ctx.globalAlpha = 1;
+
+  // Label
+  ctx.font = `bold 10px "Orbitron", monospace`;
+  ctx.fillStyle = r.color;
+  ctx.textAlign = 'center';
+  ctx.fillText(r.name, x, y + 28);
+
+  ctx.font = `9px "Share Tech Mono", monospace`;
+  ctx.fillStyle = r.status === 'STOPPED' ? '#ffcc00' : '#4a7090';
+  ctx.fillText(r.role, x, y + 38);
+}
+
+// ==== PHYSICS ====
+function updateRobots() {
+  if (currentFormation === 'explore') {
+    robots.forEach(r => {
+      if (Math.random() < 0.008) {
+        const margin = 80;
+        r.tx = margin + Math.random()*(W-margin*2);
+        r.ty = margin + Math.random()*(H-margin*2);
+      }
+    });
+  }
+
+  if (currentFormation === 'evade') {
+    robots.forEach((r, i) => {
+      let fx=0, fy=0;
+      robots.forEach((other, j) => {
+        if (i===j) return;
+        const dx = r.x-other.x, dy = r.y-other.y;
+        const d = Math.sqrt(dx*dx+dy*dy) || 1;
+        if (d < 80) { fx += dx/d * 2; fy += dy/d * 2; }
+      });
+      r.tx = Math.max(60, Math.min(W-60, r.tx + fx));
+      r.ty = Math.max(60, Math.min(H-60, r.ty + fy));
+    });
+  }
+
+  robots.forEach(r => {
+    if (r.status === 'STOPPED') return;
+    const dx = r.tx - r.x, dy = r.ty - r.y;
+    const d = Math.sqrt(dx*dx+dy*dy);
+    if (d > 2) {
+      r.vx = r.vx * 0.85 + (dx/d) * Math.min(d*0.05, 3);
+      r.vy = r.vy * 0.85 + (dy/d) * Math.min(d*0.05, 3);
+    } else {
+      r.vx *= 0.7; r.vy *= 0.7;
+    }
+    r.x = Math.max(30, Math.min(W-30, r.x + r.vx));
+    r.y = Math.max(30, Math.min(H-30, r.y + r.vy));
+  });
+}
+
+// ==== MAIN LOOP ====
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+
+  // Subtle radial vignette
+  const grd = ctx.createRadialGradient(W/2,H/2,H*0.3,W/2,H/2,H*0.8);
+  grd.addColorStop(0,'rgba(5,13,24,0)');
+  grd.addColorStop(1,'rgba(4,8,16,0.7)');
+  ctx.fillStyle = grd;
+  ctx.fillRect(0,0,W,H);
+
+  tickCount++;
+  updateRobots();
+  updateMeshLinks();
+  drawMeshLinks();
+  drawPackets();
+  robots.forEach(drawRobot);
+
+  // Update broadcasts randomly
+  if (tickCount % 90 === 0) {
+    const r = robots[Math.floor(Math.random()*robots.length)];
+    r.broadcasting = true;
+    r.broadcastTimer = 0;
+    setTimeout(() => r.broadcasting = false, 2000);
+  }
+
+  // Update stats
+  if (tickCount % 30 === 0) {
+    document.getElementById('h-packets').textContent = Math.floor(packetCount/5)*5;
+    packetCount = 0;
+    document.getElementById('ns-rssi').textContent = -55 - Math.floor(Math.random()*15);
+    document.getElementById('ns-throughput').textContent = (2.0+Math.random()*0.8).toFixed(1);
+    document.getElementById('ns-hops').textContent = (1.8+Math.random()*0.6).toFixed(1);
+    updateRobotList();
+    simulateTelemetry();
+  }
+
+  frameId = requestAnimationFrame(draw);
+}
+
+// ==== ROBOT LIST UI ====
+function updateRobotList() {
+  const container = document.getElementById('robot-list');
+  robots.forEach(r => {
+    r.battery -= 0.01;
+    if (r.battery < 10) r.battery = 95;
+    let item = document.getElementById(`ri-${r.id}`);
+    if (!item) {
+      item = document.createElement('div');
+      item.className = 'robot-item';
+      item.id = `ri-${r.id}`;
+      item.style.setProperty('--robot-color', r.color);
+      item.onclick = () => {
+        robots.forEach(x => { x.selected = false; document.getElementById(`ri-${x.id}`)?.classList.remove('selected'); });
+        r.selected = true;
+        item.classList.add('selected');
+      };
+      container.appendChild(item);
+    }
+    const sig = Math.round(r.signal);
+    item.innerHTML = `
+      <div class="robot-header">
+        <div class="robot-icon" style="--robot-color:${r.color};border-color:${r.color};box-shadow:0 0 10px ${r.color}40">${r.icon}</div>
+        <div>
+          <div class="robot-name" style="color:${r.color}">${r.name}</div>
+          <div class="robot-role">${r.role} · ${r.status}</div>
+        </div>
+        <div class="signal-bars" style="margin-left:auto">
+          ${[25,50,75,100].map(t=>`<div class="signal-bar${sig>=t?' active':''}" style="${sig>=t?`background:${r.color}`:''}; height:${t===25?4:t===50?7:t===75?10:13}px"></div>`).join('')}
+        </div>
+      </div>
+      <div class="robot-metrics">
+        <div class="metric">BAT: <span>${r.battery.toFixed(1)}%</span></div>
+        <div class="metric">LAT: <span>${r.latency}ms</span></div>
+        <div class="metric">SIG: <span>${sig}%</span></div>
+        <div class="metric">X:<span>${Math.round(r.x)}</span> Y:<span>${Math.round(r.y)}</span></div>
+      </div>
+      <div class="bar-wrap"><div class="bar-fill" style="width:${r.battery}%;background:${r.color}"></div></div>
+    `;
+  });
+}
+
+// ==== EVENT LOG ====
+const LOG_TEMPLATES = [
+  () => [`R-0${1+Math.floor(Math.random()*6)} → BROADCAST: position update`, 'mesh'],
+  () => [`Mesh re-routing: R-0${1+Math.floor(Math.random()*6)} is new relay`, 'mesh'],
+  () => [`Packet collision avoided on channel ${Math.floor(Math.random()*3)+1}`, 'warn'],
+  () => [`R-0${1+Math.floor(Math.random()*6)} telemetry: ${(Math.random()*3+1).toFixed(2)}m/s`, 'nav'],
+  () => [`Clock sync: Δt = ${(Math.random()*2).toFixed(1)}ms offset corrected`, 'sync'],
+  () => [`New mesh path: R-01 → R-0${2+Math.floor(Math.random()*4)} → R-06`, 'mesh'],
+  () => [`R-0${1+Math.floor(Math.random()*6)} RSSI drop: re-pairing...`, 'warn'],
+  () => [`Formation vector updated — consensus achieved`, 'sync'],
+  () => [`Obstacle detected at (${Math.floor(Math.random()*400)}, ${Math.floor(Math.random()*300)})`, 'warn'],
+];
+
+function log(tag, msg, type='mesh') {
+  const body = document.getElementById('log-body');
+  const now = new Date();
+  const ts = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
+  const tagMap = {mesh:'tag-mesh',nav:'tag-nav',warn:'tag-warn',err:'tag-err',sync:'tag-sync'};
+  const entry = document.createElement('div');
+  entry.className = 'log-entry';
+  entry.innerHTML = `<span class="log-time">${ts}</span><span class="log-tag ${tagMap[type]||'tag-mesh'}">${tag}</span>${msg}`;
+  body.prepend(entry);
+  // Trim old entries
+  while(body.children.length > 60) body.removeChild(body.lastChild);
+}
+
+function simulateTelemetry() {
+  const [msg, type] = LOG_TEMPLATES[Math.floor(Math.random()*LOG_TEMPLATES.length)]();
+  const tags = {mesh:'MESH',nav:'NAV',warn:'WARN',err:'ERR',sync:'SYNC'};
+  log(tags[type]||'MESH', msg, type);
+}
+
+// ==== CANVAS CLICK ====
+canvas.addEventListener('click', e => {
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+  robots.forEach(r => {
+    const dx = r.x-mx, dy = r.y-my;
+    if (Math.sqrt(dx*dx+dy*dy) < 22) {
+      robots.forEach(x => x.selected = false);
+      r.selected = true;
+      log('SYNC', `Selected ${r.name} — battery ${r.battery.toFixed(1)}%, signal ${Math.round(r.signal)}%`, 'sync');
+      updateRobotList();
+    }
+  });
+});
+
+// ==== INIT ====
+window.addEventListener('resize', resize);
+resize();
+
+// Stagger initial positions
+robots.forEach((r, i) => {
+  r.x = W/2 + Math.cos((Math.PI*2/6)*i - Math.PI/2) * 100;
+  r.y = H/2 + Math.sin((Math.PI*2/6)*i - Math.PI/2) * 100;
+  r.tx = r.x; r.ty = r.y;
+});
+
+startFormation('explore');
+updateRobotList();
+
+// Initial logs
+log('MESH','SwarmLink v2.4.1 — Bluetooth mesh initialized','mesh');
+log('SYNC','6 robots registered in topology table','sync');
+log('NAV','Mission profile: Autonomous Exploration','nav');
+log('MESH','Advertising interval: 100ms | PHY: LE 2M','mesh');
+
+draw();
+</script>
+</body>
+</html>
